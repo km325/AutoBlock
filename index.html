@@ -1,0 +1,1197 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>SmartGames - Unik policii</title>
+        <style>
+            body {overflow: hidden; }
+            img.asset_img {visibility:hidden;}
+            #myCanvas { margin-left: 0; margin-top: 0; background-color: white;}
+        </style>
+        <!-- <link rel="stylesheet" href="style.css" /> -->
+    </head>
+    <body>
+        <canvas id="myCanvas"></canvas>
+        <img src="./assets/image/car.png" id="imgCar" class="asset_img">
+        <img src="./assets/image/budova_2.png" id="imgBudova1" class="asset_img">
+        <img src="./assets/image/budova_4.png" id="imgBudova2" class="asset_img">
+        <img src="./assets/image/budova_3.png" id="imgBudova3" class="asset_img">
+        <img src="./assets/image/budova_1.png" id="imgBudova4" class="asset_img">
+        <img src="./assets/image/police_1.png" id="imgPolice1" class="asset_img">
+        <img src="./assets/image/police_2.png" id="imgPolice2" class="asset_img">
+        <img src="./assets/image/police_3.png" id="imgPolice3" class="asset_img">
+        <img src="./assets/image/police_4.png" id="imgPolice4" class="asset_img">
+        <img src="./assets/image/police_5.png" id="imgPolice5" class="asset_img">
+        <img src="./assets/image/police_6.png" id="imgPolice6" class="asset_img">
+
+        <script src="mouse.js"></script>
+        <script>
+/*
+Educational try to create a clone of "Road Block" by SmartGames
+Created by MGT in 08.2022 - work in progress.
+
+Chyby: Stacker:
+- nemel by zkopirovat elementy jez ma obsahovat do vlastniho pole,
+ktere by melo mit udaje o ID, Ypozici, vysce?
+- draw() by asi nemel resit obsluhu mysi apod. 
+- Pri rotaci prvku se zrotuje i ve Stack. Tam by mel
+byt asi vzdy vychozi.
+- prvky jdou scrolovat mimo zacatek a konec
+- pieceDraw s obrazky ignoruje ctx.Alpha
+*/
+            const canvas = document.getElementById('myCanvas');
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            const ctx = canvas.getContext('2d');
+            mouse = new Mouse();
+            mouse.init();
+
+            /*
+            Level:Obtiznost (1-4)
+            row:col:id/PieceType:rotation
+            1:1
+            0:0:1:0 // rovna tripolickova budova
+            1:2:0:0 // player
+            2:1:4:1 // L budova, rotovana o jedno doleva
+            2:3:3:3 // L budova, opacne ohnuta
+            4:3:2:2 // "skoba" budova
+            */
+            const level = {
+                number: 1, 
+                obtiznost: 1, 
+                buildings: [
+                    [0, 0, 1, 0], 
+                    [1, 2, 0, 0], 
+                    [2, 1, 4, 1], 
+                    [2, 3, 3, 3], 
+                    [4, 3, 2, 2],
+                ]
+            }
+
+            const LEVELS = [];
+            LEVELS.push(level);
+
+            // Pomocná funkce pro zobrazení promenných z Mouse class
+            function showMouse(x, y, fontSize, time) {
+                //if (Mouse.unreadEvents == 0) return;
+                drawText("Animate-time: "+time, x, y, fontSize);
+                y += fontSize;
+                drawText("Mouse-time: "+mouse.timeStamp, x, y, fontSize);
+                y += fontSize;
+                drawText("MouseX: "+mouse.x, x, y, fontSize);
+                y += fontSize;
+                drawText("MouseY: "+mouse.y, x, y, fontSize);
+                y += fontSize;
+                drawText("lbDown: "+mouse.lbDown, x, y, fontSize);
+                y += fontSize;
+                drawText("oldY: "+mouse.oldY, x, y, fontSize);
+                y += fontSize;
+                drawText("Button: "+mouse.button, x, y, fontSize);
+                y += fontSize;
+                drawText("rbDown: "+mouse.rbDown, x, y, fontSize);
+                // drawText("movementX: "+mouse.movementX, x, y, fontSize);
+                // y += fontSize;
+                // drawText("movementY: "+mouse.movementY, x, y, fontSize);
+                y += fontSize;
+                drawText("MouseType: "+mouse.type, x, y, fontSize);
+                y += fontSize;
+                drawText("lbClick: "+(mouse.lbClick==1?1:0), x, y, fontSize);
+                y += fontSize;
+                drawText("lbDoubleClick: "+(mouse.lbClick==2?1:0), x, y, fontSize);
+                y += fontSize;
+                drawText("lbDragTime: "+(Math.round(mouse.lbDragTime)), x, y, fontSize);
+                y += fontSize;
+                drawText("lbDownPos: x:"+mouse.lbDownPos.x+" y:"+mouse.lbDownPos.y, x, y, fontSize);
+                y += fontSize;
+                drawText("deltaY: "+mouse.deltaY, x, y, fontSize);
+                y += fontSize;
+                drawText("deltaMode: "+mouse.deltaMode, x, y, fontSize);
+                y += fontSize;
+                drawText("UnreadEvents: "+mouse.unreadEvents, x, y, fontSize);
+                y += fontSize;
+            }
+
+            function drawText(text, x = 0, y = 0, fontSize = 10, color="black") {
+                ctx.fillStyle = color;
+                ctx.strokeStyle = color;
+                ctx.textAlign = "left";
+                ctx.textBaseline = "bottom";
+                ctx.font = (fontSize)+"px Arial";
+                y += fontSize;
+                ctx.fillText(text, x, y);
+                ctx.lineWidth=0.5;
+                ctx.strokeText(text, x, y);
+            }
+
+            function pointInRegion(px, py, x1, y1, x2, y2) {
+                let pom;
+                if ( x1 > x2) {
+                    pom = x1;
+                    x1 = x2;
+                    x2 = pom;
+                }
+                if ( y1 > y2) {
+                    pom = y1;
+                    y1 = y2;
+                    y2 = pom;
+                }
+                if (px < x1 || px > x2 ||
+                    py < y1 || py > y2) {
+                        return false;
+                    } else {
+                        return true;
+                    }
+            }
+
+            function createArray(rows, cols, value=null) {
+                let tempA = [];
+                for (let row=0;row<rows;row++) {
+                    let tempRow = [];
+                    for (let col=0;col<cols;col++) {
+                        tempRow.push(value);
+                    }
+                    tempA.push(tempRow);
+                }
+                return tempA;
+            }
+
+            function indexOf2dArray(array2d, itemtofind) {
+                index = [].concat.apply([], ([].concat.apply([], array2d))).indexOf(itemtofind);
+                            
+                // return "false" if the item is not found
+                if (index === -1) { return false; }
+                
+                // Use any row to get the rows' array length
+                // Note, this assumes the rows are arrays of the same length
+                numColumns = array2d[0].length;
+                
+                // row = the index in the 1d array divided by the row length (number of columns)
+                row = parseInt(index / numColumns);
+                
+                // col = index modulus the number of columns
+                col = index % numColumns;
+                
+                return [row, col]; 
+            }
+
+            class Board {
+                constructor(boardX = 0, boardY = 0, boardCols = 6, boardRows = 6, boardCellSize = 50) {
+                    this.boardX = boardX;
+                    this.boardY = boardY;
+                    this.boardCols = boardCols;
+                    this.boardRows = boardRows;
+                    this.boardCellSize = boardCellSize;
+                    this.boardWidth = boardCellSize * boardCols;
+                    this.boardHeight = boardCellSize * boardRows;
+                    this.grid = [];
+                    this.idGrid = [];
+                    for (let r=0;r<boardRows;r++) {
+                        let tempGridRow1 = [];
+                        let tempGridRow2 = [];
+                        for (let c=0;c<boardCols;c++) {
+                            // 0 - background, 1 - empty piece, 2 - police car, 3 - player, 4 - budova
+                            tempGridRow1.push(0)
+                            tempGridRow2.push(-1)
+                        }
+                        this.grid.push(tempGridRow1);
+                        this.idGrid.push(tempGridRow2);
+                    }
+                }
+
+                draw(ctx) {
+                    this.drawBoardGrid(ctx);
+                    // if any piece selected, find its position
+                    // relative to board and color code posibility
+                    // of placement
+                    if (pieceSelected != -1) {
+                        let p = pieces[pieceSelected];
+                        // zkusim vyhodnocovat podle toho v jakem 
+                        // policku hraci desky se nachazi stred daneho Tile
+                        //if (!pointInRegion(p.x,p.y,this.boardX, this.boardY, this.boardX+this.boardWidth-1, this.boardY+this.boardHeight-1) && !pointInRegion(p.x+p.getWidth(), p.y+p.getHeight(), this.boardX, this.boardY, this.boardX+this.boardWidth-1, this.boardY+this.boardHeight-1)) {
+                        if (!this.pieceInBoard(pieceSelected)) {
+                            return;
+                        }
+                        for (let row=0;row<p.grid.length;row++) {
+                            for (let col=0;col<p.grid[0].length;col++) {
+                                if (p.grid[row][col]==0) continue;
+                                let bCol = this.getColFromX(p.x+col*p.cellSize+p.cellSize/2);
+                                let bRow = this.getRowFromY(p.y+row*p.cellSize+p.cellSize/2);
+                                if (bCol != -1 && bRow != -1) {
+                                    if (this.grid[bRow][bCol]!=0) {
+                                        this.highlightCell(ctx,this.XY2linear(bCol,bRow), "red");
+                                    } else {
+                                        this.highlightCell(ctx,this.XY2linear(bCol,bRow), "green");
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    //let pos = this.mouseInCell()
+                    //this.highlightCell(ctx,pos);
+                }
+
+                drawTriangle(ctx, a, b, c, color) {
+                    ctx.fillStyle = color;
+                    ctx.beginPath();
+                    ctx.moveTo(a.x, a.y);
+                    ctx.lineTo(b.x, b.y);
+                    ctx.lineTo(c.x, c.y);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                drawCell(ctx, cellRow, cellCol) {
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 0.7;
+                    let cellX = this.boardX + cellCol * this.boardCellSize;
+                    let cellY = this.boardY + cellRow * this.boardCellSize;
+                    let tileType = this.grid[cellRow][cellCol];
+                    let p = pieces[this.idGrid[cellRow][cellCol]];
+                    switch (tileType) {
+                        case TileType.empty: {
+                            let color = '';
+                            color = "rgb(150, 150, 255";
+                            this.drawTriangle(ctx, {x:cellX, y:cellY},{x:cellX+this.boardCellSize, y:cellY},{x:cellX+this.boardCellSize/2, y:cellY+this.boardCellSize/2}, color);
+                            // left
+                            color = "rgb(200, 200, 255";
+                            this.drawTriangle(ctx, {x:cellX, y:cellY},{x:cellX, y:cellY+this.boardCellSize},{x:cellX+this.boardCellSize/2, y:cellY+this.boardCellSize/2}, color);
+                            // bottom
+                            color = "rgb(0, 0, 150";
+                            this.drawTriangle(ctx, {x:cellX, y:cellY+this.boardCellSize},{x:cellX+this.boardCellSize, y:cellY+this.boardCellSize},{x:cellX+this.boardCellSize/2, y:cellY+this.boardCellSize/2}, color);
+                            // right
+                            color = "rgb(25, 25, 225";
+                            this.drawTriangle(ctx, {x:cellX+this.boardCellSize, y:cellY},{x:cellX+this.boardCellSize, y:cellY+this.boardCellSize},{x:cellX+this.boardCellSize/2, y:cellY+this.boardCellSize/2}, color);
+                            ctx.fillStyle = "blue";
+                            ctx.fillRect(cellX+this.boardCellSize/4, cellY+this.boardCellSize/4, this.boardCellSize/2, this.boardCellSize/2);
+                            break;
+                        }
+                        case TileType.solid: {
+                            ctx.fillStyle = "grey";
+                            ctx.fillRect(cellX, cellY, this.boardCellSize, this.boardCellSize);
+                            break;
+                        }
+                        case TileType.player: {
+                            ctx.fillStyle = "grey";
+                            ctx.fillRect(cellX, cellY, this.boardCellSize, this.boardCellSize);
+                            ctx.fillStyle = "red";
+                            ctx.fillRect(cellX+2, cellY+4, this.boardCellSize-4, this.boardCellSize-8);
+                            // if (p.img != null) {
+                            //     ctx.drawImage(p.img,0,0,p.imgCellSize,p.imgCellSize,cellX, cellY, this.boardCellSize, this.boardCellSize);
+                            // }
+                            break;
+                        }
+                        case TileType.police: {
+                            ctx.fillStyle = "grey";
+                            ctx.fillRect(cellX, cellY, this.boardCellSize, this.boardCellSize);
+                            ctx.fillStyle = "black";
+                            ctx.fillRect(cellX+2, cellY+4, this.boardCellSize-4, this.boardCellSize-8);
+                            break;
+                        }
+                        case TileType.building: {
+                            ctx.fillStyle = "brown";
+                            ctx.fillRect(cellX, cellY, this.boardCellSize, this.boardCellSize);
+                            // if (p.img != null) {
+                            //     ctx.drawImage(p.img,0,0,p.imgCellSize,p.imgCellSize,cellX, cellY, this.boardCellSize, this.boardCellSize);
+                            // }
+                            // ctx.fillStyle = "black";
+                            // ctx.fillRect(itemX+col*cellSize+2, itemY+row*cellSize+4, cellSize-4, cellSize-8);
+                            break;
+                        }
+                        default: {
+                            console.log("Invalid TileType : "+tileType)
+                        }
+                    }
+                }
+
+                drawBoardGrid(ctx) {
+                    let x = 0;
+                    let y = 0;
+                    let type = 0;
+                    let color = "";
+                    let drawTextured = true;
+
+                    // pokus o vykresleni kostek pomoci kresleni
+                    //drawImage() jako celku
+                    if (drawTextured) {
+                        // let id = -1;
+                        // let usedID = [];
+                        // for (let row=0;row<this.boardRows;row++) {
+                        //     for (let col=0;col<this.boardCols;col++) {
+                        //         id = this.idGrid[row][col];
+                        //         if (id == -1) {
+                        //             this.drawCell(ctx, row, col);
+                        //             continue;
+                        //         }
+                        //         // pri zmene ID se vzdy jedna o levy horni roh kostky
+                        //         if (!usedID.includes(id)) {
+                        //             usedID.push(id);
+                        //             pieces[id].drawWithImage(ctx, this.getXFromCol(col), this.getYFromRow(row), this.boardCellSize, false);
+                        //         } 
+                        //     }
+                        // }
+                        let id = -1;
+                        let usedID = [];
+                        for (let row=0;row<this.boardRows;row++) {
+                            for (let col=0;col<this.boardCols;col++) {
+                                id = this.idGrid[row][col];
+                                if (id == -1) {
+                                    this.drawCell(ctx, row, col);
+                                    continue;
+                                }
+                                // pri zmene ID se vzdy jedna o levy horni roh kostky
+                                // aaaach, tak tohle tvrzeni neni pravda :-( "vyriznute"
+                                // kostky nezapisuji ve vyriznutych castech sve ID !!!
+                                if (!usedID.includes(id)) {
+                                    usedID.push(id);
+                                    let pos = this.linear2XY(pieces[id].cell);
+                                    //pieces[id].drawWithImage(ctx, this.getXFromCol(col), this.getYFromRow(row), this.boardCellSize, false);
+                                    pieces[id].drawWithImage(ctx, this.getXFromCol(pos.x), this.getYFromRow(pos.y), this.boardCellSize, false);
+                                } 
+                            }
+                        }
+
+                    } else {
+                        // kresleni pomoci fillRect() atd.
+                        for (let row=0;row<this.boardRows;row++) {
+                            for (let col=0;col<this.boardCols;col++) {
+                                this.drawCell(ctx, row, col);
+                            }
+                        }
+                    }
+                    // draw grid / mrizku
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    // draw every line of a grid aktualne zakazano a kreslim
+                    // jen ramecek kolem
+                    if (false) {
+                        for (let row=0;row<=this.boardRows;row++) {
+                            for (let col=0;col<=this.boardCols;col++) {
+                                // draw vertical lines
+                                ctx.moveTo(this.boardX+col*this.boardCellSize, this.boardY);
+                                ctx.lineTo(this.boardX+col*this.boardCellSize, this.boardY+this.boardRows*this.boardCellSize);
+                                // draw horizontal lines
+                                ctx.moveTo(this.boardX, this.boardY+row*this.boardCellSize);
+                                ctx.lineTo(this.boardX+this.boardCols*this.boardCellSize, this.boardY+row*this.boardCellSize);
+                            }
+                        }
+                    }
+                    ctx.rect(this.boardX, this.boardY, this.boardWidth, this.boardHeight);
+                    ctx.stroke();
+                    ctx.lineWidth = 1;
+                }
+
+                highlightCell(ctx, cell, color = "yellow", opacity = 0.8) {
+                    // Note(MGT): linearni adresaci tu v podstate vubec nevyuzivam
+                    // nebylo by lepsi prepsat to na row/col ?
+                    if (cell < 0 || cell > this.boardCols * this.boardRows - 1) {
+                        return;
+                    }
+                    const pos = this.linear2XY(cell);
+                    // ctx.fillStyle = "yellow";
+                    ctx.fillStyle = color;
+                    ctx.globalAlpha = opacity;
+                    ctx.fillRect(this.boardX+pos.x*this.boardCellSize, this.boardY+pos.y*this.boardCellSize, this.boardCellSize, this.boardCellSize);
+                    ctx.globalAlpha = 1;
+                    
+                }
+
+                highlightPieceID(ctx, id) {
+                    for (let row=0;row<this.boardRows;row++) {
+                        for (let col=0;col<this.boardCols;col++) {
+                            if (this.idGrid[row][col] == id) {
+                                this.highlightCell(ctx, this.XY2linear(col,row),"yellow", 0.3);
+                            }
+                        }
+                    }
+                }
+
+                pickUpPiece(id) {
+                    if (id == -1) return;
+                    for (let row=0;row<this.boardRows;row++) {
+                        for (let col=0;col<this.boardCols;col++) {
+                            if (this.idGrid[row][col] == id) {
+                                this.idGrid[row][col] = -1;
+                                this.grid[row][col] = TileType.empty;
+                            }
+                        }
+                    }
+                    pieces[id].cell = -1;
+                    pieces[id].selected = true;
+                    pieceSelected = id;
+                    allPiecesPlaced = false;
+                }
+
+                // return left X position of given Col
+                getXFromCol(col) {
+                    return this.boardX + col * this.boardCellSize;
+                }
+                
+                // return top Y position of given Row
+                getYFromRow(row) {
+                    return this.boardY + row * this.boardCellSize;
+                }
+
+                // return Col number from X position
+                getColFromX(x) {
+                    if (x < this.boardX || x > this.boardX+this.boardWidth-1) return -1;
+                    return Math.floor((x - this.boardX)/this.boardCellSize);
+                }
+                
+                // return Row number from Y position
+                getRowFromY(y) {
+                    if (y < this.boardY || y > this.boardY+this.boardHeight-1) return -1;
+                    return Math.floor((y - this.boardY)/this.boardCellSize);
+                }
+
+                // vrati object o {x, y} pozici - mimochodem,
+                // vsude mam poradi row, col - tak bych to mohl
+                // mit stejne i tady. Nutno prepsat nazvy atributu
+                // objektu u vsech volani linear2XY!
+                linear2XY(number) {
+                    const cx = number % this.boardCols;
+                    const cy = Math.floor(number/this.boardCols);
+                    return {x:cx, y:cy}
+                }
+
+                XY2linear(col, row) {
+                    return row*this.boardCols + col;
+                }
+
+                pieceInBoard(pieceNumber) {
+                    let p = pieces[pieceNumber];
+                    if (!this.pointInBoard(p.x+p.cellSize/2,p.y+p.cellSize/2) && !this.pointInBoard(p.x+p.getWidth()-p.cellSize/2, p.y+p.getHeight()-p.cellSize/2)) {
+                        return false;
+                    }                    
+                    return true;
+                }
+
+                pointInBoard(px, py) {
+                    let x1 = this.boardX;
+                    let y1 = this.boardY;
+                    let x2 = x1 + this.boardWidth - 1;
+                    let y2 = y1 + this.boardHeight - 1;
+                    if (px < x1 || px > x2 ||
+                        py < y1 || py > y2) {
+                            return false;
+                        } else {
+                            return true;
+                        }
+                }
+
+                canPlacePiece(pieceNumber) {
+                    let p = pieces[pieceNumber];
+                    // Note(MGT): v podstate stejny kod jako v board.draw()
+                    // asi by bylo lepsi vytvorit rutinu cca "board.canPlaceCell()"
+                    // a vyuzit ji
+                    for (let row=0;row<p.grid.length;row++) {
+                        for (let col=0;col<p.grid[0].length;col++) {
+                            // vadi tahle podminka? muze nastat pripad kdy diky tomuhle 
+                            // porusim pravidla?
+                            if (p.grid[row][col]==0) continue;
+                            let bCol = this.getColFromX(p.x+col*p.cellSize+p.cellSize/2);
+                            let bRow = this.getRowFromY(p.y+row*p.cellSize+p.cellSize/2);
+                            if (bCol != -1 && bRow != -1) {
+                                if (this.grid[bRow][bCol]!=0) {
+                                    return false;
+                                } 
+                            } else {
+                                // nektera cast "domina" je mimo board
+                                return false;
+                            }
+                        }
+                    }
+                    return true;
+                }
+
+                placePiece(pieceNumber) {
+                    // vsechny kontroly na validitu umisteni domina by uz 
+                    // mely byt vykonany, takze je rovnou ulozim
+                    let p = pieces[pieceNumber];
+                    for (let row=0;row<p.grid.length;row++) {
+                        for (let col=0;col<p.grid[0].length;col++) {
+                            let bCol = this.getColFromX(p.x+col*p.cellSize+p.cellSize/2);
+                            let bRow = this.getRowFromY(p.y+row*p.cellSize+p.cellSize/2);
+                            // Note(MGT): nevim jestli je to k necemu dobre, ale kdyz
+                            // uz to ve strukture mam tak to vyplnim
+                            if (row == 0 && col == 0) {
+                                p.cell = board.XY2linear(bCol, bRow);
+                            }
+                            // ulozime jen pokud ma cell nejakou hodnotu
+                            // 0 znaci zadne policko !
+                            if (p.grid[row][col] > 0) {
+                                this.grid[bRow][bCol] = p.grid[row][col];
+                                this.idGrid[bRow][bCol] = p.id;
+                            }
+                        }
+                    }
+                    // Note(MGT) pieces by mozna take mel byt objekt, ktery
+                    // by teprve obsahoval array of Piece - pak by nad nim 
+                    // mohly byt volany funkce jako Pieces.allPiecesPlaced atd.
+                    if (pieces.filter(p=>p.cell==-1).length==0) {
+                        console.log("All pieces placed - trying to escape !");
+                        escapePath = this.tryToEscape();
+                        allPiecesPlaced = true;
+                    }
+                }
+
+                tryToEscape() {
+                    let searchGrid = createArray(6,6,null);
+                    let stack = [];
+                    let escapePath = [];
+                    let step = 0;
+                    let pos = [];
+                    let searchEnd = false;
+                    let carWin = false; // podarilo se autu uniknout? Vzhledem k tomu, ze hrajeme za policii tak trochu schizofrenni podminka..
+
+                    // returns array [row, col]
+                    let startPos = indexOf2dArray(this.grid, TileType.player);
+                    searchGrid[startPos[0]][startPos[1]] = 0;
+                    stack.push(startPos);
+
+                    // vrati zda predana pozice je na libovolne hranici pole
+                    function reachedArrayBorder(pole, pos=[0, 0]) {
+                        // pos je [row, col] format
+                        const maxXIndex = pole[0].length-1;
+                        const maxYIndex = pole.length-1;
+                        if (pos[0]==0 || pos[0]==maxYIndex) return true;
+                        if (pos[1]==0 || pos[1]==maxXIndex) return true;
+                        return false;
+                    }
+                    function isFreeCell(pos, smer, parent) {
+                        // pos je format [row, col], smer je take [row, col]
+                        // pricemz hodnoty jsou -1 nahoru, vlevo | 1 dolu, vpravo
+                        const testRow = pos[0]+smer[0];
+                        const testCol = pos[1]+smer[1];
+                        // tohle by melo byt zjisteno uz v reachedBorder
+                        // mam z vnorene funkce pristup na "this"?
+                        // ok, takze nemam, nicmene muzu je predat jako parametr
+                        // pouzito ciste pro vyzkouseni, mohl jsem pouzit globalni promennou "board"
+                        if (testRow<0 || testCol<0 || testRow>(parent.boardHeight-1) || testCol>(parent.boardWidth-1)) {
+                            // Note(MGT): vazne by to chtelo debugovaci graficke zpravy..
+                            console.log("fce isFreeCell() kondince mela byt zjistena uz v reachedBorder()");
+                            return false;
+                        }
+                        // je tam prekazka?
+                        if (parent.grid[testRow][testCol]>TileType.solid) return false;
+                        // byli jsme uz na tomto poli?
+                        if (searchGrid[testRow][testCol]!=null) return false;
+                        return true;
+                    }
+                    while (!searchEnd) {
+                        // search cells around actual pos
+                        let newStack = [];
+                        while (stack.length>0) {
+                            pos=stack.pop();
+                            let row = pos[0];
+                            let col = pos[1];
+                            step = searchGrid[row][col];
+                            // otestuj zda lupic neunikl
+                            if (reachedArrayBorder(searchGrid, pos)) {
+                                // lupic unikl, najdi celou trasu
+                                carWin = true;
+                                searchEnd = true;
+                                // ok, takze predpokladame, ze lupic unikl, ted jak najit jakou cestou?
+                                escapePath.push(pos);
+                                while (step>0) {
+                                    step--;
+                                    pos = indexOf2dArray(searchGrid,step);
+                                    escapePath.push(pos);
+                                }
+                                break;
+                            }
+                            step++;
+                            // otestuj zda jsou okolni bunky volne
+                            // up
+                            if (isFreeCell(pos,[-1,0], this)) {
+                                newStack.push([row-1,col]);
+                                searchGrid[row-1][col]=step;
+                            }
+                            // right
+                            if (isFreeCell(pos,[0,1], this)) {
+                                newStack.push([row,col+1]);
+                                searchGrid[row][col+1]=step;
+                            }
+                            // down
+                            if (isFreeCell(pos,[1,0], this)) {
+                                newStack.push([row+1,col]);
+                                searchGrid[row+1][col]=step;
+                            }
+                            // left
+                            if (isFreeCell(pos,[0,-1], this)) {
+                                newStack.push([row,col-1]);
+                                searchGrid[row][col-1]=step;
+                            }
+                        } // zpracovali jsme aktualni stack while (stack.length>0)
+                        if (searchEnd || newStack.length==0) {
+                            break;
+                        } else {
+                            // uloz/prirad nove pozice
+                            stack = newStack;
+                        }
+                        
+                    } // while (!endSeach)
+                    return escapePath;
+                }
+
+                mouseInCell() {
+                    if (mouse.x < this.boardX || mouse.x > this.boardX + this.boardWidth || 
+                        mouse.y < this.boardY || mouse.y > this.boardY + this.boardHeight) {
+                            return -1;
+                        } else {
+                            let mx = Math.floor((mouse.x - this.boardX)/this.boardCellSize);
+                            let my = Math.floor((mouse.y - this.boardY)/this.boardCellSize);
+                            return my*this.boardCols+mx;
+                        }
+                }
+
+                loadLevel(number) {
+                    let items = LEVELS[number-1].buildings;
+                    for (let x=0;x<items.length;x++) {
+                        this.addPiece(items[x][0], items[x][1], items[x][2], items[x][3]);
+                    }
+                }
+
+                addPiece(sRow, sCol, id, rotation) {
+                    let p = pieces[id];
+                    for (let i=0;i<rotation;i++) {
+                        p.rotateLeft();
+                    }
+                    for (let row=0;row<p.grid.length;row++) {
+                        for (let col=0;col<p.grid[0].length;col++) {
+                            if (p.grid[row][col]>0) {
+                                this.grid[sRow+row][sCol+col] = p.grid[row][col];
+                                this.idGrid[sRow+row][sCol+col] = id;
+                            }
+                        }
+                    }
+                    p.cell = this.XY2linear(sCol, sRow);
+                }
+            }
+
+            const TileType = {
+                empty: 0, 
+                solid: 1, 
+                police: 2, 
+                player: 3, 
+                building: 4
+            }
+
+            const PieceType = {
+                player: 0, 
+                building_1: 1,
+                building_2: 2,
+                building_3: 3,
+                building_4: 4,
+                police_1: 5, 
+                police_2: 6,
+                police_3: 7,
+                police_4: 8,
+                police_5: 9,
+                police_6: 10,
+            }
+
+            class Piece {
+                constructor(type = 0, cellSize = 50, id = -1) {
+                    this.cellSize = cellSize;
+                    this.type = type;
+                    this.rotation = 0;
+                    // grid values are: 0 - don't show, 1 - empty piece, 2 - police car, 3 - player car
+                    this.grid = [];
+                    // starting cell position / this.grid[0][0] 
+                    // starts in cell? -1 = not placed in grid
+                    this.cell = -1;
+                    this.x = -1;
+                    this.y = -1;
+                    this.selected = false;
+                    this.id = id;
+                    this.imgCellSize = 200;
+                    this.img = null
+                    // maybe
+                    // carType - player, police
+                    // carRotation - starting direction of car
+                    switch (this.type) {
+                        case PieceType.player: {
+                            // jedno ctvereckovy typ - player
+                            this.grid=[[3]];
+                            // width and height without rotation in cellSize units
+                            this.img = document.getElementById("imgCar");
+                            this.width = 1;
+                            this.height = 1;
+                            break;
+                        }
+                        case PieceType.building_1: {
+                            this.grid.push([4, 4, 4]);
+                            this.img = document.getElementById("imgBudova1");
+                            this.width = 3;
+                            this.height = 1;
+                            break;
+                        }
+                        case PieceType.building_2: {
+                            this.grid.push([4, 4]);
+                            this.grid.push([0, 4]);
+                            this.img = document.getElementById("imgBudova2");
+                            this.width = 2;
+                            this.height = 2;
+                            break;
+                        }
+                        case PieceType.building_3: {
+                            this.grid.push([4, 4, 4]);
+                            this.grid.push([4, 0, 0]);
+                            this.img = document.getElementById("imgBudova3");
+                            this.width = 3;
+                            this.height = 2;
+                            break;
+                        }
+                        case PieceType.building_4: {
+                            this.grid.push([4, 4, 4]);
+                            this.grid.push([0, 0, 4]);
+                            this.img = document.getElementById("imgBudova4");
+                            this.width = 3;
+                            this.height = 2;
+                            break;
+                        }
+                        case PieceType.police_1: {
+                            // 1 1
+                            // - 2
+                            this.grid.push([1, 1]);
+                            this.grid.push([0, 2]);
+                            this.img = document.getElementById("imgPolice1");
+                            this.width = 2;
+                            this.height = 2;
+                            break;
+                        }
+                        case PieceType.police_2: {
+                            this.grid.push([1, 2]);
+                            this.grid.push([0, 1]);
+                            this.img = document.getElementById("imgPolice2");
+                            this.width = 2;
+                            this.height = 2;
+                            break;
+                        }
+                        case PieceType.police_3: {
+                            this.grid.push([1, 2, 1]);
+                            this.img = document.getElementById("imgPolice3");
+                            this.width = 3;
+                            this.height = 1;
+                            break;
+                        }
+                        case PieceType.police_4: {
+                            this.grid.push([1, 1, 1]);
+                            this.grid.push([0, 2, 0]);
+                            this.img = document.getElementById("imgPolice4");
+                            this.width = 3;
+                            this.height = 2;
+                            break;
+                        }
+                        case PieceType.police_5: {
+                            this.grid.push([1, 1, 2]);
+                            this.grid.push([0, 0, 1]);
+                            this.img = document.getElementById("imgPolice5");
+                            this.width = 3;
+                            this.height = 2;
+                            break;
+                        }
+                        case PieceType.police_6: {
+                            this.grid.push([0, 0, 1]);
+                            this.grid.push([2, 1, 1]);
+                            this.img = document.getElementById("imgPolice6");
+                            this.width = 3;
+                            this.height = 2;
+                            break;
+                        }
+                        default: {
+                            console.log('Incorect PIECE.type : '+this.type);
+                        }
+                    }
+                }
+
+                rotateLeft() {
+                    // kladny smer otaceni je proti smeru hodinovych rucicek
+
+                    // [ r0s0 (1), r0s1 (2), r0s2 (3)] 
+                    // [ r1s0 (4), r1s1 (5), r1s2 (6)]
+
+                    // [ r0s2 (3), r1s2 (6)]
+                    // [ r0s1 (2), r1s1 (5)]
+                    // [ r0s0 (1), r1s0 (4)]
+
+                    let oRows = this.grid.length;
+                    let oCols = this.grid[0].length;
+
+                    let newGrid = [];
+                    let nRows = oCols;
+                    let nCols = oRows;
+                    // populate new Grid with empty cells
+                    for (let row=0;row<nRows;row++) {
+                        let tempRow = [];
+                        for (let col=0;col<nCols;col++) {
+                            tempRow.push(0);
+                        }
+                        newGrid.push(tempRow);
+                    }
+
+                    for (let oRow=0;oRow<oRows;oRow++) {
+                        for (let oCol=0;oCol<oCols;oCol++) {
+                            newGrid[oCols-1-oCol][oRow] = this.grid[oRow][oCol];
+                        }
+                    }
+                    this.grid = newGrid;
+                    this.rotation = (this.rotation+1)%4;
+                }
+
+                drawWithImage(ctx, x, y, cellSize, updatePos = false) {
+                    if (updatePos) {
+                        this.x = x; this.y = y;
+                    }
+                    if (pieceSelected != -1 && this.selected) {
+                        ctx.globalAlpha = 0.5;
+                    }
+                    cellSize = cellSize || this.cellSize
+                    let rotWidth = this.getWidth(cellSize);
+                    let rotHeight = this.getHeight(cellSize);
+                    let width = this.width*cellSize;
+                    let height = this.height*cellSize;
+                    if (this.img != null) { // img.readyState == 'complete'
+                        if (this.rotation > 0) {
+                            ctx.save();
+                            ctx.translate(x+rotWidth/2, y+rotHeight/2);
+                            ctx.rotate(-this.rotation*Math.PI/2); // stupne*Math.PI/180 (my tocime po 90ti)
+                            ctx.drawImage(this.img,0,0,this.img.width,this.img.height,-width/2, -height/2, width, height);
+                            ctx.restore();
+                        } else {
+                            ctx.drawImage(this.img,0,0,this.img.width,this.img.height,x, y, this.width*cellSize, this.height*cellSize);
+                        }
+                    } else {
+                        console.log('Chybne nacteny IMG Domina !!!');
+                    }
+                    ctx.globalAlpha = 1;
+                }
+
+                draw(ctx, x, y, cellSize, updatePos = false) {
+                    // well, nevim jak rozlisit kdy kreslime domino
+                    // ve stacku a kdy mimo nej
+                    if (this.img != null) {
+                        this.drawWithImage(ctx, x, y, cellSize, updatePos);
+                        return;
+                    }
+                    if (updatePos) {
+                        this.x = x; this.y = y;
+                    }
+                    if (pieceSelected != -1 && this.selected) {
+                        ctx.globalAlpha = 0.5;
+                    }
+                    cellSize = cellSize || this.cellSize
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 0.7;
+                    for (let row=0;row<this.grid.length;row++) {
+                        for (let col=0;col<this.grid[0].length;col++) {
+                            let tileType = this.grid[row][col];
+                            switch (tileType) {
+                                case TileType.empty: {
+                                    break;
+                                }
+                                case TileType.solid: {
+                                    ctx.fillStyle = "grey";
+                                    ctx.fillRect(x+col*cellSize, y+row*cellSize, cellSize, cellSize);
+                                    break;
+                                }
+                                case TileType.player: {
+                                    ctx.fillStyle = "grey";
+                                    ctx.fillRect(x+col*cellSize, y+row*cellSize, cellSize, cellSize);
+                                    ctx.fillStyle = "red";
+                                    ctx.fillRect(x+col*cellSize+2, y+row*cellSize+4, cellSize-4, cellSize-8);
+                                    if (this.img != null && this.img.width>0) {
+                                        ctx.drawImage(this.img,col*this.imgCellSize,row*this.imgCellSize,this.imgCellSize,this.imgCellSize,x+col*cellSize, y+row*cellSize, cellSize, cellSize);
+                                    }
+                                    break;
+                                }
+                                case TileType.police: {
+                                    ctx.fillStyle = "grey";
+                                    ctx.fillRect(x+col*cellSize, y+row*cellSize, cellSize, cellSize);
+                                    ctx.fillStyle = "black";
+                                    ctx.fillRect(x+col*cellSize+2, y+row*cellSize+4, cellSize-4, cellSize-8);
+                                    break;
+                                }
+                                case TileType.building: {
+                                    ctx.fillStyle = "brown";
+                                    ctx.fillRect(x+col*cellSize, y+row*cellSize, cellSize, cellSize);
+                                    // ctx.fillStyle = "black";
+                                    // ctx.fillRect(itemX+col*cellSize+2, itemY+row*cellSize+4, cellSize-4, cellSize-8);
+                                    break;
+                                }
+                                default: {
+                                    console.log("Invalid TileType : "+tileType)
+                                }
+                            }
+                        }
+                    }
+                    ctx.globalAlpha = 1;
+                }
+            
+                getWidth(cellSize) {
+                    cellSize = cellSize || this.cellSize;
+                    return this.grid[0].length * cellSize;
+                }
+
+                getHeight(cellSize) {
+                    cellSize = cellSize || this.cellSize;
+                    return this.grid.length * cellSize;
+                }
+            }
+
+            class Graphics {
+                constructor() {}
+
+                // kresli trojuhelnik ze tri bodu ve formatu {x:posX, y:posY}
+                drawTriangle(ctx, a={x:0, y:0}, b={x:100, y:200}, c={x:300, y:10}, fillColor = "black", strokeColor = "black") {
+                    ctx.save();
+                    ctx.fillStyle = fillColor;
+                    ctx.strokeStyle = strokeColor;
+                    ctx.beginPath();
+                    ctx.moveTo(a.x, a.y);
+                    ctx.lineTo(b.x, b.y);
+                    ctx.lineTo(c.x, c.y);
+                    ctx.closePath();
+                    ctx.stroke();
+                    ctx.fill();
+                    ctx.restore();
+                }
+
+                drawText(text, x, y, fontSize, color="black") {
+                    ctx.fillStyle = color;
+                    ctx.strokeStyle = color;
+                    ctx.textAlign = "left";
+                    ctx.textBaseline = "bottom";
+                    ctx.font = (fontSize)+"px Arial";
+                    y += fontSize;
+                    ctx.fillText(text, x, y);
+                    ctx.lineWidth=0.5;
+                    ctx.strokeText(text, x, y);
+                }
+
+            }
+
+            class Stack {
+                constructor (x=0, y=0, width=170, height=300, items = []) {
+                    this.x = x;
+                    this.y = y;
+                    this.width = width;
+                    this.height = height;
+                    this.items = items;
+                    this.buttonHeight = 20;
+                    this.itemPadding = 5;
+                    this.itemsOffset = 0;
+                    this.itemOver = -1;
+                }
+
+                draw(ctx) {
+                    let pos1 = {x:0, y:0};
+                    let pos2 = {x:0, y:0};
+                    let pos3 = {x:0, y:0};
+
+                    // set clipping region
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(this.x,this.y+this.buttonHeight, this.width, this.height-this.buttonHeight*2);
+                    ctx.clip();
+
+                    // aktualni Y pozice pro kresleni Tile prvku
+                    let itemY = this.y + this.buttonHeight - this.itemsOffset + 1;
+                    this.itemOver = -1;
+                    // let piecesCount = pieces.filter(x => {return (x.cell == -1);}).length;
+                    for (let i=0;i<this.items.length;i++) {
+                        let item = this.items[i];
+                        if (item.cell != -1) continue;
+                        let cellSize = item.cellSize/2;
+                        let itemWidth = item.grid[0].length * cellSize;
+                        let itemHeight = item.grid.length * cellSize;
+                        let itemX = this.x + Math.floor((this.width-itemWidth)/2) - 1;
+                        if (itemY+itemHeight>this.y+this.buttonHeight) {
+                            // "podsviceni elementu, pokud je nad nim mys"
+                            if (mouse.inRegion(this.x+1,Math.max(itemY, this.y+this.buttonHeight), this.x+this.width-1,Math.min(this.y+this.height-this.buttonHeight,itemY+itemHeight-1))) {
+                                ctx.fillStyle = "yellow";
+                                ctx.fillRect(this.x+1,itemY,this.width-1,itemHeight-1);
+                                // selecting element
+                                this.itemOver = i;
+                            }
+                            item.draw(ctx, itemX, itemY, cellSize);
+                        }
+                        itemY += itemHeight + this.itemPadding;
+                        if (itemY > this.y + this.height - this.buttonHeight) break;
+                    }
+                    // end clipping region
+                    ctx.restore();
+
+                    // draw top "button up"
+                    pos1 = {x: this.x+10, y: this.y+this.buttonHeight-2};
+                    pos2 = {x: this.x+this.width-10, y: this.y+this.buttonHeight-2};
+                    pos3 = {x: this.x+this.width/2-1, y: this.y+2};
+                    if (mouse.inRegion(this.x+1,this.y+1,this.x+this.width-2,this.y+this.buttonHeight-2)) {
+                        if (mouse.lbDown) {
+                            GR.drawTriangle(ctx, pos1, pos2, pos3, "red", "black");
+                            this.itemsOffset++;
+                        } else {
+                            GR.drawTriangle(ctx, pos1, pos2, pos3, "red", "white");
+                        }
+                    } else {
+                        GR.drawTriangle(ctx, pos1, pos2, pos3, "aqua", "white");
+                    }
+
+                    // draw bottom "button down"
+                    pos1 = {x: this.x+10, y: this.y+this.height-this.buttonHeight+2};
+                    pos2 = {x: this.x+this.width-10, y: this.y+this.height-this.buttonHeight+2};
+                    pos3 = {x: this.x+this.width/2-1, y: this.y+this.height-2};
+                    if (mouse.inRegion(this.x+1,this.y+this.height-this.buttonHeight,this.x+this.width-2,this.y+this.height-2)) {
+                        if (mouse.lbDown) {
+                            GR.drawTriangle(ctx, pos1, pos2, pos3, "red", "black");
+                            if (this.itemsOffset>0) this.itemsOffset--;
+                        } else {
+                            GR.drawTriangle(ctx, pos1, pos2, pos3, "red", "white");
+                        }
+                    } else {
+                        GR.drawTriangle(ctx, pos1, pos2, pos3, "aqua", "white");
+                    }
+
+                    // kresba ramecku
+                    ctx.strokeStyle = "black";
+                    ctx.beginPath();
+                    ctx.rect(this.x, this.y, this.width, this.height);
+                    ctx.moveTo(this.x, this.y+this.buttonHeight);
+                    ctx.lineTo(this.x+this.width, this.y+this.buttonHeight);
+                    ctx.moveTo(this.x, this.y+this.height-this.buttonHeight);
+                    ctx.lineTo(this.x+this.width, this.y+this.height-this.buttonHeight);
+                    ctx.stroke();
+                }
+            }
+            
+            const CONFIG = {
+                cellSize: 50, 
+            }
+            const GR = new Graphics();
+            let board = new Board(10, 10, 6, 6, CONFIG.cellSize);
+            let pieces = [];
+            Object.keys(PieceType).forEach((type, index) => {
+                pieces.push(new Piece(PieceType[type], CONFIG.cellSize, index));
+            });
+            stack = new Stack(board.boardX+board.boardWidth+CONFIG.cellSize, board.boardY, 2*CONFIG.cellSize, board.boardHeight, pieces);
+            board.loadLevel(1);
+            let escapePath = [];
+            let allPiecesPlaced = false;
+            // urcuje ze muzeme hybat se zadanim a vsemi kostkami
+            let freeEdit = false;
+
+            // testovaci promenne
+            // UI Class test ***************************
+            let debug = false;
+            const inputHandler = new InputHandler();
+            const uimanager = new UIManager(ctx);
+            const checkBox = new CheckBox(20, 400, 50);
+            uimanager.addObject(checkBox);
+            // UI Class test ***************************
+
+            let lastTime = 0;
+            let timeDiff = 0;
+            let pieceSelected = -1;
+            let lbDownPrev = -1;
+            let rbDownPrev = -1;
+            function animate(timeStamp) {
+                timeDiff = (timeStamp - lastTime)/1000; // casovy rozdil mezi animacnimi okny v sekundach
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                mouse.readMouse(timeStamp);
+                board.draw(ctx);
+                stack.draw(ctx);
+
+                if (allPiecesPlaced) {
+                    if (escapePath.length==0) {
+                        drawText("POLICIE VYHRALA !!!", 20, board.boardY+board.boardHeight+50, 30, "black");
+                    } else {
+                        drawText("DIVOKY JEZDEC UNIKL, POLICIE PROHRALA :-(", 20, board.boardY+board.boardHeight+50, 20, "black");
+                        // ok, co ted? mame escapePath (pozpatku), 
+                        // potrebujeme animovat cestu auta. Auto ma 
+                        // pozici v pixelech na gridu a start a end
+                        // pozici pro kazde pole cesty
+                    }
+                }
+
+                if (mouse.inRegion(stack.x+1,stack.y+stack.buttonHeight,stack.x+stack.width-2,stack.y+stack.height-stack.buttonHeight)) {
+                    stack.itemsOffset = stack.itemsOffset + mouse.deltaY;
+                }
+                // handling pieces select and movement
+                if (mouse.lbDown && !lbDownPrev) {
+                    if (stack.itemOver != -1) {
+                        // stojime ve Stacku nad nejakym prvkem
+                        if (pieceSelected != -1) {
+                            pieces[pieceSelected].selected = false;
+                        }
+                        pieceSelected = stack.itemOver;
+                        pieces[pieceSelected].selected = true;
+                    } else {
+                        // nejsme nad Stackem, takze deselect
+                        // pripadne umisteni na board
+                        if (pieceSelected != -1) {
+                            // jsme nad boardem?
+                            // can use pointInRegion() ale jsem liny, vypisovat ty body..
+                            if (board.pieceInBoard(pieceSelected) && board.canPlacePiece(pieceSelected)) {
+                                board.placePiece(pieceSelected);
+                            }
+                            pieces[pieceSelected].selected = false;
+                            pieceSelected = -1;
+                        } else if (board.pointInBoard(mouse.x, mouse.y)) {
+                            // jsme nad boarde s "prazdnou mysi"
+                            // so pickUpPiece
+                            let id = board.idGrid[board.getRowFromY(mouse.y)][board.getColFromX(mouse.x)];
+                            if (!freeEdit && (id >=PieceType.player && id<=PieceType.building_4)) {
+                                // Note(MGT): zjevne funguje jen v prohlizeci - udelat vlastni funkci pro canvas!
+                                alert("S temito kostkami muzete hybat jen v editacnim modu!");
+                            } else {
+                                board.pickUpPiece(id);
+                            }
+                        }
+                    }
+                }
+
+                // rotate piece
+                if (mouse.rbDown && !rbDownPrev && (pieceSelected != -1)) {
+                    pieces[pieceSelected].rotateLeft();
+                } else if (mouse.rbDown && !rbDownPrev) {
+                    // pokus o ulozeni LEVEL struktury
+                    
+                }
+
+                // draw selected piece
+                if (pieceSelected != -1) {
+                    pieces[pieceSelected].draw(ctx, mouse.x-pieces[pieceSelected].getWidth()/2, mouse.y-pieces[pieceSelected].getHeight()/2,0,true);
+                } else {
+                    // jsme na boardem?
+                    if (board.pointInBoard(mouse.x, mouse.y)) {
+                        let id = board.idGrid[board.getRowFromY(mouse.y)][board.getColFromX(mouse.x)];
+                        if (id != -1) board.highlightPieceID(ctx, id);
+                    }
+                }
+
+                // debug mouse
+                // if (pieceSelected != -1) {
+                //     drawText("Piece["+pieceSelected+"].ID = "+pieces[pieceSelected].id,20, 400, 15);
+                // }
+                // showMouse(350, 350, 15, timeStamp);
+
+                // ********************
+                // test User Interface
+                uimanager.update(mouse);
+                // ********************
+
+                lbDownPrev = mouse.lbDown;
+                rbDownPrev = mouse.rbDown;
+                lastTime = timeStamp;
+                requestAnimationFrame(animate);
+            }
+            animate(0);
+        </script>
+        <!-- // <script type="module" src="main.js"></script> -->
+        
+    </body>
+</html>
